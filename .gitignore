@@ -1,0 +1,13 @@
+# Ignore Everything
+*
+
+# But no these files
+!.gitignore
+!*.py
+!README.md
+!*.pkl
+!*.dat
+!*.txt
+
+# ... even if they are in subdirectories
+!*/
