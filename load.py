@@ -64,9 +64,9 @@ class DataWorker(object):
 
 
 
-    def output_results(self, results):
+    def output_results(self, results, savename="submission.csv"):
         """ Prepare submission file given results"""
-        f = open("submission.csv", "w")
+        f = open(savename, "w")
         f.write("ID_code,target\n")
         for i in range(self.n_tests):
             f.write("test_%d,%d\n" % (i, results[i]))

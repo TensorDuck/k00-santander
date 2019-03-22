@@ -19,6 +19,14 @@ def make_simple_tree(ld):
 
     return simple_tree
 
+def output_tree(ld, split_value):
+    simple_tree = sktree.DecisionTreeClassifier(max_depth=100, min_samples_split=split_value)
+    simple_tree.fit(ld.training, ld.targets)
+    joblib.dump(simple_tree, "simple_tree_min_sample_split.pkl")
+
+    return simple_tree
+
+
 def cross_validate_tree(ld):
     #cross validate, use stratified KFold and shuffle data
     cv_splitter = StratifiedKFold(n_splits=10, shuffle=True)
@@ -76,7 +84,15 @@ if __name__ == "__main__":
     ld = DataWorker()
 
     os.chdir(work_dir)
+    #cross_validate_tree(ld)
 
-    cross_validate_tree(ld)
+    tree_1000 = output_tree(ld, 1000)
+    tree_6000 = output_tree(ld, 6000)
+
+    results1000 = tree_1000.predict(ld.tests)
+    results6000 = tree_6000.predict(ld.tests)
+
+    ld.output_results(results1000, "submission_mss1000.csv")
+    ld.output_results(results6000, "submission_mss6000.csv")
 
     os.chdir(cwd)
