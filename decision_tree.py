@@ -50,7 +50,77 @@ def cross_validate_tree(ld):
     np.savetxt("cv_min_split.dat", sample_splits, fmt="%d")
     np.savetxt("cv_scores.dat", all_cv_scores)
 
-def run_simple_decision_tree():
+def cross_validate_tree_weighted(ld, saveprefix="cv", sample_splits=None, impurity_decrease=None, weight_positive=9, kfold_n_sets=10):
+    """ Perform Cross-Validation but apply a weight to positive (1) targets
+
+    Since the training set has many more instances of 0's than 1's (90% 0's), we
+    can apply a weight to the 1's (positive targets). This is especially true
+    in light of the fact that the test set appears to have many positive
+    targets (50% are 1).
+
+    """
+    all_trees = []
+    if sample_splits is not None:
+        allx = sample_splits
+        for split_value in sample_splits:
+            simple_tree = sktree.DecisionTreeClassifier(max_depth=100, min_samples_split=split_value)
+            all_trees.append(simple_tree)
+    elif impurity_decrease is not None:
+        allx = impurity_decrease
+        for i_dec in impurity_decrease:
+            simple_tree = sktree.DecisionTreeClassifier(max_depth=100, min_impurity_decrease=i_dec)
+            all_trees.append(simple_tree)
+    else:
+        print("Failure: Must specify set of hyper parameters")
+        return
+
+    cv_splitter = StratifiedKFold(n_splits=kfold_n_sets, shuffle=True)
+    training, target, test = ld.get_debug_set()
+    #training, target, test = ld.get_production_set()
+
+    split_indices_generator = cv_splitter.split(training, target) # returns a generator
+
+    # make lists of len = kfold_n_sets for training, test, and weights
+    kfold_training = []
+    kfold_test = []
+    kfold_weights = []
+    for thing in split_indices_generator:
+        kfold_training.append(thing[0])
+        kfold_test.append(thing[1])
+
+        #calculate weights for the scoring
+        wt = np.ones(np.shape(thing[1]))
+        wt[np.where(target[thing[1]] == 1)] = weight_positive
+        kfold_weights.append(wt)
+    assert len(kfold_training) == kfold_n_sets
+    assert len(kfold_test) == kfold_n_sets
+    assert len(kfold_weights) == kfold_n_sets
+
+    all_cv_scores = []
+    for simple_tree in all_trees:
+        these_scores = []
+        for i_kfold in range(kfold_n_sets):
+            this_training = training[kfold_training[i_kfold],:]
+            this_target = target[kfold_training[i_kfold]]
+            simple_tree.fit(this_training, this_target)
+
+            test_inputs = training[kfold_test[i_kfold],:]
+            test_targets = target[kfold_test[i_kfold]]
+            test_weights = kfold_weights[i_kfold]
+
+            test_score = simple_tree.score(test_inputs, test_targets, sample_weight=test_weights)
+            these_scores.append(test_score)
+        all_cv_scores.append(these_scores)
+
+    np.savetxt("%s_values.dat" % saveprefix, allx)
+    np.savetxt("%s_scores.dat" % saveprefix, all_cv_scores)
+
+def run_simple_decision_tree(ld):
+    """ First idea: Make Decision Tree without Cross-Validation
+
+    Result: 54% accurate classifier, not great.
+
+    """
     # build the decision simple_tree
     simple_tree = make_simple_tree
 
@@ -76,15 +146,14 @@ def run_simple_decision_tree():
     print(a_zeros / (a_zeros + a_ones))
     print(b_zeros / (b_zeros + b_ones))
 
-if __name__ == "__main__":
-    cwd = os.getcwd()
-    work_dir = "%s/simple_decision_tree" % cwd
-    os.makedirs(work_dir, exist_ok=True)
+def run_cross_validate_simple_tree_and_select_model(ld):
+    """ Second idea: Cross-Validate and select based on accuracy score
 
-    ld = DataWorker()
+    Result: <=50% accuracy, model always outputted 0 due to considerations of
+    maximizing accuracy over generality of the model.
 
-    os.chdir(work_dir)
-    #cross_validate_tree(ld)
+    """
+    cross_validate_tree(ld)
 
     tree_1000 = output_tree(ld, 1000)
     tree_6000 = output_tree(ld, 6000)
@@ -94,5 +163,16 @@ if __name__ == "__main__":
 
     ld.output_results(results1000, "submission_mss1000.csv")
     ld.output_results(results6000, "submission_mss6000.csv")
+
+if __name__ == "__main__":
+    cwd = os.getcwd()
+    work_dir = "%s/simple_decision_tree" % cwd
+    os.makedirs(work_dir, exist_ok=True)
+
+    ld = DataWorker()
+
+    os.chdir(work_dir)
+
+    cross_validate_tree_weighted(ld, saveprefix="cv_acc9_sample-count", sample_splits=[2, 5, 10, 20, 50, 100, 200, 500], impurity_decrease=None)
 
     os.chdir(cwd)
