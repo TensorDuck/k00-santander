@@ -75,8 +75,8 @@ def cross_validate_tree_weighted(ld, saveprefix="cv", sample_splits=None, impuri
         return
 
     cv_splitter = StratifiedKFold(n_splits=kfold_n_sets, shuffle=True)
-    training, target, test = ld.get_debug_set()
-    #training, target, test = ld.get_production_set()
+    #training, target, test = ld.get_debug_set()
+    training, target, test = ld.get_production_set()
 
     split_indices_generator = cv_splitter.split(training, target) # returns a generator
 
