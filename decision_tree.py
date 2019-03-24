@@ -1,3 +1,5 @@
+""" Methods for working with a regular decision tree """
+
 import numpy as np
 import sklearn
 from sklearn.externals import joblib
@@ -6,6 +8,7 @@ from sklearn import tree as sktree
 import os
 import time
 
+from util import cross_validate_weighted
 from load import DataWorker
 
 def make_simple_tree(ld):
@@ -22,7 +25,7 @@ def make_simple_tree(ld):
 def output_tree(ld, split_value):
     simple_tree = sktree.DecisionTreeClassifier(max_depth=100, min_samples_split=split_value)
     simple_tree.fit(ld.training, ld.targets)
-    joblib.dump(simple_tree, "simple_tree_min_sample_split.pkl")
+    joblib.dump(simple_tree, "simple_tree_min_sample_split%d.pkl" % split_value)
 
     return simple_tree
 
@@ -74,43 +77,11 @@ def cross_validate_tree_weighted(ld, saveprefix="cv", sample_splits=None, impuri
         print("Failure: Must specify set of hyper parameters")
         return
 
-    cv_splitter = StratifiedKFold(n_splits=kfold_n_sets, shuffle=True)
+
     #training, target, test = ld.get_debug_set()
     training, target, test = ld.get_production_set()
 
-    split_indices_generator = cv_splitter.split(training, target) # returns a generator
-
-    # make lists of len = kfold_n_sets for training, test, and weights
-    kfold_training = []
-    kfold_test = []
-    kfold_weights = []
-    for thing in split_indices_generator:
-        kfold_training.append(thing[0])
-        kfold_test.append(thing[1])
-
-        #calculate weights for the scoring
-        wt = np.ones(np.shape(thing[1]))
-        wt[np.where(target[thing[1]] == 1)] = weight_positive
-        kfold_weights.append(wt)
-    assert len(kfold_training) == kfold_n_sets
-    assert len(kfold_test) == kfold_n_sets
-    assert len(kfold_weights) == kfold_n_sets
-
-    all_cv_scores = []
-    for simple_tree in all_trees:
-        these_scores = []
-        for i_kfold in range(kfold_n_sets):
-            this_training = training[kfold_training[i_kfold],:]
-            this_target = target[kfold_training[i_kfold]]
-            simple_tree.fit(this_training, this_target)
-
-            test_inputs = training[kfold_test[i_kfold],:]
-            test_targets = target[kfold_test[i_kfold]]
-            test_weights = kfold_weights[i_kfold]
-
-            test_score = simple_tree.score(test_inputs, test_targets, sample_weight=test_weights)
-            these_scores.append(test_score)
-        all_cv_scores.append(these_scores)
+    all_cv_scores = cross_validate_weighted(all_trees, training, target, test, weight_positive=weight_positive, kfold_n_sets=kfold_n_sets)
 
     np.savetxt("%s_values.dat" % saveprefix, allx)
     np.savetxt("%s_scores.dat" % saveprefix, all_cv_scores)
@@ -173,6 +144,6 @@ if __name__ == "__main__":
 
     os.chdir(work_dir)
 
-    cross_validate_tree_weighted(ld, saveprefix="cv_acc9_sample-count", sample_splits=[2, 5, 10, 20, 50, 100, 200, 500], impurity_decrease=None)
-
+    #cross_validate_tree_weighted(ld, saveprefix="cv_acc9_sample-count", sample_splits=[2, 5, 10, 20, 50, 100, 200, 500], impurity_decrease=None)
+    simple_tree = output_tree(ld, 20)
     os.chdir(cwd)

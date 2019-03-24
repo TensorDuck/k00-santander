@@ -1,5 +1,7 @@
 import numpy as np
 import math
+from sklearn import preprocessing
+from sklearn import cluster
 
 class DataWorker(object):
     def __init__(self):
@@ -18,6 +20,19 @@ class DataWorker(object):
         n_ones = np.shape(np.where(results == 1))[1]
 
         return n_zeros, n_ones
+
+    def get_clusters(self, n_ones_clusters=500, n_zeroes_clusters=500):
+        ones_kmeans = MiniBatchKMeans(n_clusters = n_ones_clusters)
+        zeroes_kmeans = MiniBatchKMeans(n_clusters = n_zeroes_clusters)
+
+        return
+        
+    def get_normalized_production_set(self):
+        """ Return a mean centered and variance normalized data training set """
+        new_training = preprocessing.scale(self.training)
+        new_tests = preprocessing.scale(self.tests)
+
+        return new_training, self.targets, new_tests
 
     def get_production_set(self):
         """ Return full training, target and test sets """
