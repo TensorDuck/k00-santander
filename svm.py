@@ -13,16 +13,18 @@ from load import DataWorker
 
 
 def output_svc(ld, c=1.0, kernel="rbf"):
+    print("Outputting SVM model")
     simple_svm = sksvm.SVC(C=c, kernel=kernel, cache_size=1000, gamma="auto")
-    #training, targets, tests = ld.get_normalized_production_set()
-    training, targets, tests = ld.get_debug_set()
-    simple_svm.fit(training, targets)
+    training, targets, tests, weights = ld.get_clustered_production_set()
+    #training, targets, tests, weights = ld.get_debug_set_weighted()
+    simple_svm.fit(training, targets, sample_weight=weights)
     joblib.dump(simple_svm, "simple_svm_k%s_C%f.pkl" % (kernel, c))
 
     return simple_svm
 
 def cross_validate_svc(ld, c_values=None, kernel="rbf", saveprefix="cv", weight_positive=9, kfold_n_sets=10):
     """ Cross validation with a weighted accuracy prediction """
+    print("Performing Cross-Validation")
     all_clf = []
     if c_values is not None:
         allx = c_values
@@ -34,10 +36,10 @@ def cross_validate_svc(ld, c_values=None, kernel="rbf", saveprefix="cv", weight_
         print("Failure: Must specify set of hyper parameters")
         return
 
-    training, target, test = ld.get_debug_set()
-    #training, target, test = ld.get_normalized_production_set()
+    #training, target, test, weights = ld.get_debug_set_weighted()
+    training, target, test, weights = ld.get_clustered_production_set()
 
-    all_cv_scores = cross_validate_weighted(all_clf, training, target, test, weight_positive=weight_positive, kfold_n_sets=kfold_n_sets)
+    all_cv_scores = cross_validate_weighted(all_clf, training, target, test, weight_positive=weight_positive, kfold_n_sets=kfold_n_sets, sample_weight=weights)
 
     np.savetxt("%s_values.dat" % saveprefix, allx)
     np.savetxt("%s_scores.dat" % saveprefix, all_cv_scores)
@@ -52,9 +54,14 @@ if __name__ == "__main__":
     t1 = time.time()
     os.chdir(work_dir)
 
+    ld.compute_clusters()
+
     simple_svm = output_svc(ld)
 
-    cross_validate_svc(ld, np.arange(0.1,1.1,0.1))
+    cross_validate_svc(ld, np.arange(0.1,1.1,0.1), kernel="rbf", saveprefix="cv_rbf")
+    cross_validate_svc(ld, np.arange(0.1,1.1,0.1), kernel="linear", saveprefix="cv_linear")
+    cross_validate_svc(ld, np.arange(0.1,1.1,0.1), kernel="poly", saveprefix="cv_poly")
+    cross_validate_svc(ld, np.arange(0.1,1.1,0.1), kernel="sigmoid", saveprefix="cv_sigmoid")
 
     training, targets, tests = ld.get_normalized_production_set()
     these_predictions = simple_svm.predict(tests)

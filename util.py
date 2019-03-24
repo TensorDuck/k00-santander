@@ -3,7 +3,7 @@ import numpy as np
 import sklearn
 from sklearn.model_selection import cross_val_score, StratifiedKFold
 
-def cross_validate_weighted(all_classifiers, training, target, test, weight_positive=9, kfold_n_sets=10):
+def cross_validate_weighted(all_classifiers, training, target, test, weight_positive=9, kfold_n_sets=10, sample_weight=None):
     cv_splitter = StratifiedKFold(n_splits=kfold_n_sets, shuffle=True)
     split_indices_generator = cv_splitter.split(training, target) # returns a generator
 
@@ -29,7 +29,11 @@ def cross_validate_weighted(all_classifiers, training, target, test, weight_posi
         for i_kfold in range(kfold_n_sets):
             this_training = training[kfold_training[i_kfold],:]
             this_target = target[kfold_training[i_kfold]]
-            clf.fit(this_training, this_target)
+            if sample_weight is not None:
+                this_weight = sample_weight[kfold_training[i_kfold]]
+            else:
+                this_weight = None
+            clf.fit(this_training, this_target, sample_weight=this_weight)
 
             test_inputs = training[kfold_test[i_kfold],:]
             test_targets = target[kfold_test[i_kfold]]

@@ -1,13 +1,15 @@
 import numpy as np
 import math
+import os
 from sklearn import preprocessing
 from sklearn import cluster
 
 class DataWorker(object):
     def __init__(self):
-        self.training = np.load("data/train_inputs.npy")
-        self.targets = np.load("data/train_targets.npy")
-        self.tests = np.load("data/test_inputs.npy")
+        self.cwd = os.getcwd()
+        self.training = np.load("%s/data/train_inputs.npy" % self.cwd)
+        self.targets = np.load("%s/data/train_targets.npy" % self.cwd)
+        self.tests = np.load("%s/data/test_inputs.npy" % self.cwd)
 
         self.n_training, self.n_inputs = np.shape(self.training)
         self.n_tests = np.shape(self.tests)[0]
@@ -21,12 +23,71 @@ class DataWorker(object):
 
         return n_zeros, n_ones
 
-    def get_clusters(self, n_ones_clusters=500, n_zeroes_clusters=500):
-        ones_kmeans = MiniBatchKMeans(n_clusters = n_ones_clusters)
-        zeroes_kmeans = MiniBatchKMeans(n_clusters = n_zeroes_clusters)
+    def compute_clusters(self, n_ones_clusters=1000, n_zeros_clusters=1000):
+        """ Compute cluster centers using a MiniBatch K-means algorithm
 
-        return
-        
+        Also compute weights for each centroid, where the weight is equivalent
+        to the number of points assigned to that centroid
+
+        """
+        ones_kmeans = cluster.MiniBatchKMeans(n_clusters=n_ones_clusters)
+        zeros_kmeans = cluster.MiniBatchKMeans(n_clusters=n_zeros_clusters)
+
+        ones_idx = np.where(self.targets == 1)
+        zeros_idx = np.where(self.targets == 0)
+
+        normalized_training, normalized_targets, normalized_tests = self.get_normalized_production_set()
+
+        ones_labels = ones_kmeans.fit_predict(normalized_training[ones_idx])
+        zeros_labels = zeros_kmeans.fit_predict(normalized_training[zeros_idx])
+
+        ones_weights = np.zeros(n_ones_clusters)
+        zeros_weights = np.zeros(n_zeros_clusters)
+
+        for thing in ones_labels:
+            ones_weights[thing] += 1
+        for thing in zeros_labels:
+            zeros_weights[thing] += 1
+
+        np.savetxt("%s/data/ones_cluster_centers_n%d.dat" % (self.cwd, n_ones_clusters), ones_kmeans.cluster_centers_)
+        np.savetxt("%s/data/ones_weights_n%d.dat" % (self.cwd, n_ones_clusters), ones_weights)
+
+        np.savetxt("%s/data/zeros_cluster_centers_n%d.dat" % (self.cwd, n_zeros_clusters), zeros_kmeans.cluster_centers_)
+        np.savetxt("%s/data/zeros_weights_n%d.dat" % (self.cwd, n_zeros_clusters), zeros_weights)
+
+    def get_clusters_weighted(self, n_ones_clusters=1000, n_zeros_clusters=1000, recompute=False):
+        """ Return the cluster centers and weights for each type of data """
+
+        if recompute:
+            self.compute_clusters(n_ones_clusters=n_ones_clusters, n_zeros_clusters=n_zeros_clusters)
+
+        ones_kmeans = np.loadtxt("%s/data/ones_cluster_centers_n%d.dat" % (self.cwd, n_ones_clusters))
+        ones_weights = np.loadtxt("%s/data/ones_weights_n%d.dat" % (self.cwd, n_ones_clusters))
+
+        zeros_kmeans = np.loadtxt("%s/data/zeros_cluster_centers_n%d.dat" % (self.cwd, n_zeros_clusters))
+        zeros_weights = np.loadtxt("%s/data/zeros_weights_n%d.dat" % (self.cwd, n_zeros_clusters))
+
+        return ones_kmeans, ones_weights, zeros_kmeans, zeros_weights
+
+    def get_clustered_production_set(self, n_ones_clusters=1000, n_zeros_clusters=1000):
+        normalized_training, normalized_targets, normalized_tests = self.get_normalized_production_set()
+
+        ones_kmeans, ones_weights, zeros_kmeans, zeros_weights = self.get_clusters_weighted(n_ones_clusters=n_ones_clusters, n_zeros_clusters=n_zeros_clusters)
+
+        training = np.append(ones_kmeans, zeros_kmeans, axis=0)
+        weights = np.append(ones_weights, zeros_weights, axis=0)
+        weights /= np.sum(weights)
+
+        targets = np.append(np.ones(n_ones_clusters), np.zeros(n_zeros_clusters))
+
+        #make sure it all worked out
+        assert np.shape(targets)[0] == np.shape(training)[0]
+        assert np.shape(targets)[0] == np.shape(weights)[0]
+
+        assert np.shape(training)[1] == self.n_inputs
+
+        return training, targets, normalized_tests, weights
+
     def get_normalized_production_set(self):
         """ Return a mean centered and variance normalized data training set """
         new_training = preprocessing.scale(self.training)
@@ -49,6 +110,17 @@ class DataWorker(object):
         new_test_inputs = self.tests[indices, :]
 
         return new_training_inputs, new_training_targets, new_test_inputs
+
+    def get_debug_set_weighted(self, n_mini=100):
+        """ Get a mini set of test and targets for debugging purposes """
+        indices = np.random.choice(self.n_training, size=n_mini)
+        new_training_inputs = self.training[indices,:]
+        new_training_targets = self.targets[indices]
+
+        indices = np.random.choice(self.n_tests, size=n_mini)
+        new_test_inputs = self.tests[indices, :]
+
+        return new_training_inputs, new_training_targets, new_test_inputs, np.ones(n_mini)
 
     def split_training_into_random_sets(self, n_sets):
         random_indices = np.random.choice(self.n_training, size = self.n_training, replace=False).astype(int) #all the data indices in a random order
