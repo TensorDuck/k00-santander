@@ -45,8 +45,8 @@ def cross_validate_rf(ld, n_estimators_list=[20], max_samples_list=[20000], max_
                 all_input_values.append([n_estimators, max_samples, max_features])
                 all_clf.append(get_random_forest(n_estimators=n_estimators, max_samples=max_samples, max_features=max_features))
 
-    training, target, test = ld.get_debug_set()
-    #training, target, test = ld.get_production_set()
+    #training, target, test = ld.get_debug_set()
+    training, target, test = ld.get_production_set()
 
     all_cv_scores = cross_validate_weighted(all_clf, training, target, test, weight_positive=weight_positive, kfold_n_sets=kfold_n_sets)
 
