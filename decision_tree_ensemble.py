@@ -12,6 +12,17 @@ import time
 from util import cross_validate_weighted
 from load import DataWorker
 
+def get_new_predictions(clf, ld, cutoff):
+    results = clf.predict_proba(ld.tests)[:,1]
+    new_results = np.zeros(np.shape(results))
+    new_results[np.where(results > cutoff)] = 1
+
+    zeros, ones = ld.find_number_classified(new_results)
+    ratio = zeros / (zeros + ones)
+    print("For cutoff %f, Found: %f are zeroes" % (cutoff, ratio)) #percentage of zeros in the test set
+
+    return new_results, ratio
+
 def get_random_forest(n_estimators=1, max_samples=20000, max_features=20):
     """ Return a BaggingClassifier for a Decision Tree
 
@@ -27,7 +38,7 @@ def get_random_forest(n_estimators=1, max_samples=20000, max_features=20):
     return simple_tree
 
 def output_tree(ld, n_estimators=1, max_samples=20000, max_features=200):
-    simple_tree = get_random_forest(n_estimators=1, max_samples=20000, max_features=200)
+    simple_tree = get_random_forest(n_estimators=n_estimators, max_samples=max_samples, max_features=max_features)
     simple_tree.fit(ld.training, ld.targets)
     joblib.dump(simple_tree, "RFclf.pkl")
 
@@ -63,8 +74,14 @@ if __name__ == "__main__":
     os.chdir(work_dir)
     #simple_tree = output_tree(ld)
 
-    cross_validate_rf(ld, n_estimators_list=np.arange(10,110,10), max_samples_list=[20000], max_features_list=[200], saveprefix="cv_n_estimators")
-    cross_validate_rf(ld, n_estimators_list=[20], max_samples_list=np.arange(5000,50000,5000), max_features_list=[200], saveprefix="cv_max_samples")
-    cross_validate_rf(ld, n_estimators_list=[20], max_samples_list=[10], max_features_list=np.arange(20,200,20), saveprefix="cv_max_features")
+#    cross_validate_rf(ld, n_estimators_list=np.arange(10,110,10), max_samples_list=[20000], max_features_list=[200], saveprefix="cv_n_estimators")
+    #cross_validate_rf(ld, n_estimators_list=[20], max_samples_list=np.arange(5000,50000,5000), max_features_list=[200], saveprefix="cv_max_samples")
+    #cross_validate_rf(ld, n_estimators_list=[20], max_samples_list=[10], max_features_list=np.arange(20,200,20), saveprefix="cv_max_features")
 
+    newtree = output_tree(ld, n_estimators=100, max_samples=20000, max_features=20) #initial bad guess
+    results = newtree.predict(ld.tests)
+    zeros, ones = ld.find_number_classified(results)
+    print("Found: %f are zeroes" % (zeros / (zeros + ones))) #percentage of zeros in the test set
+
+    ld.output_results(results)
     os.chdir(cwd)
