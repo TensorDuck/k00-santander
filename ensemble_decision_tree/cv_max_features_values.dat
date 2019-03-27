@@ -1,0 +1,6 @@
+# n_estimators, max_samples, max_features
+20 20000 10
+20 20000 20
+20 20000 30
+20 20000 40
+20 20000 50
