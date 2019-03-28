@@ -12,6 +12,30 @@ import time
 from util import cross_validate_weighted
 from load import DataWorker
 
+class WeightedPredictionEnsemble(skensemble.BaggingClassifier):
+
+    def __init__(self, **kwargs):
+        self.weight_one = kwargs.pop("weight_one", 1)
+        super(WeightedPredictionEnsemble, self).__init__(**kwargs)
+
+    def predict(self, X):
+        weight_sum = np.zeros(np.shape(X)[0])
+        avg_prediction = np.zeros(np.shape(X)[0])
+        for clf in self.estimators_:
+            results = clf.predict(X)
+
+            weight_sum[np.where(results == 0)] += 1
+            weight_sum[np.where(results == 1)] += self.weight_one
+
+            results[np.where(results == 1)] *= self.weight_one
+            avg_prediction += results
+
+        final = avg_prediction / weight_sum
+        final[np.where(final >= 0.5)] = 1
+        final[np.where(final < 1)] = 0
+
+        return final
+
 def get_new_predictions(clf, ld, cutoff):
     results = clf.predict_proba(ld.tests)[:,1]
     new_results = np.zeros(np.shape(results))
@@ -23,7 +47,7 @@ def get_new_predictions(clf, ld, cutoff):
 
     return new_results, ratio
 
-def get_random_forest(n_estimators=1, max_samples=20000, max_features=20):
+def get_random_forest(n_estimators=1, max_samples=20000, max_features=20, class_weight=None, weight_one=1):
     """ Return a BaggingClassifier for a Decision Tree
 
     Some processing times:
@@ -34,17 +58,18 @@ def get_random_forest(n_estimators=1, max_samples=20000, max_features=20):
 
     """
 
-    simple_tree = skensemble.BaggingClassifier(base_estimator=sktree.DecisionTreeClassifier(), n_estimators=n_estimators, max_samples=max_samples, max_features=max_features)
+    #simple_tree = skensemble.BaggingClassifier(base_estimator=sktree.DecisionTreeClassifier(max_features=max_features, class_weight=class_weight), n_estimators=n_estimators, max_samples=max_samples)
+    simple_tree = WeightedPredictionEnsemble(base_estimator=sktree.DecisionTreeClassifier(max_features=max_features, class_weight=class_weight), n_estimators=n_estimators, max_samples=max_samples, weight_one=weight_one)
     return simple_tree
 
-def output_tree(ld, n_estimators=1, max_samples=20000, max_features=200):
-    simple_tree = get_random_forest(n_estimators=n_estimators, max_samples=max_samples, max_features=max_features)
+def output_tree(ld, n_estimators=1, max_samples=20000, max_features=200, class_weight=None, weight_one=1):
+    simple_tree = get_random_forest(n_estimators=n_estimators, max_samples=max_samples, max_features=max_features, class_weight=class_weight, weight_one=weight_one)
     simple_tree.fit(ld.training, ld.targets)
     joblib.dump(simple_tree, "RFclf.pkl")
 
     return simple_tree
 
-def cross_validate_rf(ld, n_estimators_list=[20], max_samples_list=[20000], max_features_list=[20], saveprefix="cv", weight_positive=9, kfold_n_sets=5):
+def cross_validate_rf(ld, n_estimators_list=[20], max_samples_list=[20000], max_features_list=[20], saveprefix="cv", weight_positive=9, kfold_n_sets=5, class_weight=None, weight_one=1):
     """ Cross- Validate a random forest classifier """
 
     all_input_values = []
@@ -54,7 +79,7 @@ def cross_validate_rf(ld, n_estimators_list=[20], max_samples_list=[20000], max_
         for max_samples in max_samples_list:
             for max_features in max_features_list:
                 all_input_values.append([n_estimators, max_samples, max_features])
-                all_clf.append(get_random_forest(n_estimators=n_estimators, max_samples=max_samples, max_features=max_features))
+                all_clf.append(get_random_forest(n_estimators=n_estimators, max_samples=max_samples, max_features=max_features, class_weight=class_weight, weight_one=weight_one))
 
     #training, target, test = ld.get_debug_set()
     training, target, test = ld.get_production_set()
@@ -74,11 +99,11 @@ if __name__ == "__main__":
     os.chdir(work_dir)
     #simple_tree = output_tree(ld)
 
-#    cross_validate_rf(ld, n_estimators_list=np.arange(10,110,10), max_samples_list=[20000], max_features_list=[200], saveprefix="cv_n_estimators")
-    #cross_validate_rf(ld, n_estimators_list=[20], max_samples_list=np.arange(5000,50000,5000), max_features_list=[200], saveprefix="cv_max_samples")
-    #cross_validate_rf(ld, n_estimators_list=[20], max_samples_list=[10], max_features_list=np.arange(20,200,20), saveprefix="cv_max_features")
+#    cross_validate_rf(ld, n_estimators_list=np.arange(10,110,10), max_samples_list=[20000], max_features_list=[200], saveprefix="cv_n_estimators", class_weight={0:1, 1:9}, weight_one=9)
+    cross_validate_rf(ld, n_estimators_list=[20], max_samples_list=np.arange(5000,55000,5000), max_features_list=[20], saveprefix="cv_max_samples", class_weight={0:1, 1:9}, weight_one=9)
+    cross_validate_rf(ld, n_estimators_list=[20], max_samples_list=[20000], max_features_list=np.arange(20,220,20), saveprefix="cv_max_features", class_weight={0:1, 1:9}, weight_one=9)
 
-    newtree = output_tree(ld, n_estimators=100, max_samples=20000, max_features=20) #initial bad guess
+    newtree = output_tree(ld, n_estimators=100, max_samples=20000, max_features=20, class_weight={0:1, 1:9}, weight_one=9) #initial bad guess
     results = newtree.predict(ld.tests)
     zeros, ones = ld.find_number_classified(results)
     print("Found: %f are zeroes" % (zeros / (zeros + ones))) #percentage of zeros in the test set
