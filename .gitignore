@@ -5,7 +5,6 @@
 !.gitignore
 !*.py
 !README.md
-!*.pkl
 !*.dat
 !*.txt
 

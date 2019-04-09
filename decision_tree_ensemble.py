@@ -69,7 +69,7 @@ def output_tree(ld, n_estimators=1, max_samples=20000, max_features=200, class_w
 
     return simple_tree
 
-def cross_validate_rf(ld, n_estimators_list=[20], max_samples_list=[20000], max_features_list=[20], saveprefix="cv", weight_positive=9, kfold_n_sets=5, class_weight=None, weight_one=1):
+def cross_validate_rf(ld, n_estimators_list=[20], max_samples_list=[20000], max_features_list=[20], saveprefix="cv", weight_positive=9, kfold_n_sets=5, class_weight_list=[1]):
     """ Cross- Validate a random forest classifier """
 
     all_input_values = []
@@ -78,8 +78,10 @@ def cross_validate_rf(ld, n_estimators_list=[20], max_samples_list=[20000], max_
     for n_estimators in n_estimators_list:
         for max_samples in max_samples_list:
             for max_features in max_features_list:
-                all_input_values.append([n_estimators, max_samples, max_features])
-                all_clf.append(get_random_forest(n_estimators=n_estimators, max_samples=max_samples, max_features=max_features, class_weight=class_weight, weight_one=weight_one))
+                for weight_one in class_weight_list:
+                    all_input_values.append([n_estimators, max_samples, max_features, weight_one])
+                    class_weight = {0:1, 1:weight_one}
+                    all_clf.append(get_random_forest(n_estimators=n_estimators, max_samples=max_samples, max_features=max_features, class_weight=class_weight, weight_one=weight_one))
 
     #training, target, test = ld.get_debug_set()
     training, target, test = ld.get_production_set()
@@ -87,7 +89,7 @@ def cross_validate_rf(ld, n_estimators_list=[20], max_samples_list=[20000], max_
     all_cv_scores = cross_validate_weighted(all_clf, training, target, test, weight_positive=weight_positive, kfold_n_sets=kfold_n_sets)
 
     np.savetxt("%s_scores.dat" % saveprefix, all_cv_scores)
-    np.savetxt("%s_values.dat" % saveprefix, np.array(all_input_values), header="n_estimators, max_samples, max_features", fmt="%d")
+    np.savetxt("%s_values.dat" % saveprefix, np.array(all_input_values), header="n_estimators, max_samples, max_features, weight_one", fmt="%d")
 
 if __name__ == "__main__":
     cwd = os.getcwd()
@@ -100,10 +102,11 @@ if __name__ == "__main__":
     #simple_tree = output_tree(ld)
 
 #    cross_validate_rf(ld, n_estimators_list=np.arange(10,110,10), max_samples_list=[20000], max_features_list=[200], saveprefix="cv_n_estimators", class_weight={0:1, 1:9}, weight_one=9)
-    cross_validate_rf(ld, n_estimators_list=[20], max_samples_list=np.arange(5000,55000,5000), max_features_list=[20], saveprefix="cv_max_samples", class_weight={0:1, 1:9}, weight_one=9)
-    cross_validate_rf(ld, n_estimators_list=[20], max_samples_list=[20000], max_features_list=np.arange(20,220,20), saveprefix="cv_max_features", class_weight={0:1, 1:9}, weight_one=9)
+    #cross_validate_rf(ld, n_estimators_list=[20], max_samples_list=np.arange(5000,55000,5000), max_features_list=[20], saveprefix="cv_max_samples", class_weight={0:1, 1:9}, weight_one=9)
+    #cross_validate_rf(ld, n_estimators_list=[20], max_samples_list=[20000], max_features_list=[10, 20, 30, 40, 50, 100, 150, 200], saveprefix="cv_max_features", class_weight={0:1, 1:9}, weight_one=9)
+    #cross_validate_rf(ld, n_estimators_list=[20], max_samples_list=[30000], max_features_list=[40], saveprefix="cv_weight_one", class_weight_list=[1, 7, 8, 9, 10, 11,15,20])
 
-    newtree = output_tree(ld, n_estimators=100, max_samples=20000, max_features=20, class_weight={0:1, 1:9}, weight_one=9) #initial bad guess
+    newtree = output_tree(ld, n_estimators=200, max_samples=30000, max_features=40, class_weight={0:1, 1:7}, weight_one=7) #initial bad guess
     results = newtree.predict(ld.tests)
     zeros, ones = ld.find_number_classified(results)
     print("Found: %f are zeroes" % (zeros / (zeros + ones))) #percentage of zeros in the test set
